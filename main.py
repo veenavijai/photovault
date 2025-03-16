@@ -1,12 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status
-from pydantic import BaseModel
+from models import UserData, SessionData, FileData  
+from schemas import UserInfo, SessionInfo, FileInfo
 import datetime
 import hashlib
 import random
 import xxhash
 
-import sqlalchemy
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 
@@ -16,42 +16,9 @@ app = FastAPI()
 DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = sqlalchemy.orm.declarative_base()
 
 
-class UserData(Base):
-    __tablename__ = "users"
-    user_id = Column(Integer, primary_key = True, index = True)
-    email = Column(String)
-    device_id = Column(String)
-
-class SessionData(Base):
-    __tablename__ = "sessions"
-    session_token = Column(String,  primary_key = True, index = True)
-    # TODO have the hashed version of this?
-    four_digit_code = Column(String)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
-    device_id = Column(String)
-
-class FileData(Base):
-    __tablename__ = "files"
-    file_id = Column(Integer, primary_key = True, index = True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
-    file_name = Column(String)
-
-
-class UserInfo(BaseModel):
-    email: str
-    device_id: str
-
-class SessionInfo(BaseModel):
-    device_id: str
-    code: int
-
-class FileInfo(BaseModel):
-    file_name: str
-
-
+# Database-related helper functions
 def get_db():
     db = SessionLocal()
     try:
@@ -82,7 +49,7 @@ def secure_hash(key: int) -> str:
 async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_db)):
     # Check if user is in DB first
     user = get_user_by_info(db, userInfo)
-    if not user:
+    if user is None:
         raise HTTPException(
             status_code = status.HTTP_401_UNAUTHORIZED,
             detail = "You are not a registered user."
@@ -95,6 +62,10 @@ async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_
     pending_codes[userInfo.device_id] = hashedCode
     print(f'Your 4-digit code is: {code}')
     return code
+
+
+# Store temporary 4 digit codes in memory
+pending_codes = {}
 
 '''
 # Creates mock database users - run only once
@@ -114,11 +85,7 @@ finally:
     db.close()
 '''
 
-# Store temporary 4 digit codes in memory
-pending_codes = {}
-
-
-def hash_session_info(sessionInfo: SessionInfo) -> str:
+def generate_session_token(sessionInfo: SessionInfo) -> str:
     # A random seed like current time makes this token harder to regenerate
     now = datetime.datetime.now(tz = datetime.timezone.utc)
     currentTime = int(now.timestamp())
@@ -129,42 +96,70 @@ def hash_session_info(sessionInfo: SessionInfo) -> str:
     hasher.update(str(sessionInfo.code) + sessionInfo.device_id)
     return hasher.hexdigest()
 
-'''
-def create_session(db: Session, sessionInfo: SessionInfo):
-    # TODO can I call it session?
+def get_user_id_from_device_id(db: Session, sessionInfo: SessionInfo) -> int:
+    user = db.query(UserData).filter(UserData.device_id == sessionInfo.device_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code = status.HTTP_404_NOT_FOUND,
+            detail = "Your user details could not be retrieved."
+        )
 
-    db_entry = Session(sessionToken:)
+    return user.user_id
+
+def validate_device_id_and_code(db, hashedCode: str, sessionInfo: SessionInfo) -> int:
+
+    user_id = get_user_id_from_device_id(db, sessionInfo)
+
+    if not sessionInfo.device_id in pending_codes:
+            raise HTTPException(
+                status_code = status.HTTP_400_BAD_REQUEST,
+                detail = "Please request a new 4-digit code."
+            )
+
+    
+    if pending_codes[sessionInfo.device_id] != hashedCode:
+        raise HTTPException(
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = "You have entered an incorrect 4-digit code."
+        )
+    
+    return user_id
+    
+def create_session_entry(db: Session, userId: int, sessionInfo: SessionInfo, hashedCode: str, sessionToken: str):
+    db_entry = SessionData(session_token = sessionToken, four_digit_code = hashedCode, device_id = sessionInfo.device_id, user_id = userId)
     db.add(db_entry)
     db.commit()
     db.refresh(db_entry)
-    return db_entry
-'''
-
+    
 
 @app.post("/auth/code/verify")
-async def generate_session_token(sessionInfo: SessionInfo):
-    if not sessionInfo.device_id in pending_codes:
+async def verify_four_digit_code(sessionInfo: SessionInfo, db: Session = Depends(get_db)):
+    if sessionInfo is None or sessionInfo.code is None:
         raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "If your device is already registered, please request a new 4-digit code."
+            status_code = status.HTTP_400_BAD_REQUEST,
+            detail = "Your request is missing a four digit code."
         )
     
+    # Validate whether user ID is retrievable, device ID is registered and code is correct
     hashedCode = secure_hash(sessionInfo.code)
-    if pending_codes[sessionInfo.device_id] != hashedCode:
-        raise HTTPException(
-            status_code = status.HTTP_401_UNAUTHORIZED,
-            detail = "You have not entered a valid 4-digit code."
-        )
+    user_id = validate_device_id_and_code(db, hashedCode, sessionInfo)
     
+    '''
     print(f'Pending codes in hashed form are:\n')
     for keys, value in pending_codes.items():
         print(f'keys: {keys}, hashedCode: {value}\n')
+    '''
     
+    # If we have reached here, our device ID and code are valid
     # Clear this element from our local map
     del pending_codes[sessionInfo.device_id]
-    print(f"\nDeleted {sessionInfo.code} from list of pending codes")
+    # print(f"\nDeleted {sessionInfo.code} from list of pending codes")
 
-    sessionToken = hash_session_info(sessionInfo)
+    sessionToken = generate_session_token(sessionInfo)
+
+    # Store session information in SessionData DB
+    create_session_entry(db, user_id, sessionInfo, hashedCode, sessionToken)
+    
     return {"session_token": sessionToken}
 
 '''

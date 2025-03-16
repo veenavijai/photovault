@@ -6,7 +6,7 @@ class UserInfo(BaseModel):
 
 class SessionInfo(BaseModel):
     device_id: str
-    code: int
+    code: str
 
 class FileInfo(BaseModel):
     file_name: str

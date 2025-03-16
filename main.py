@@ -1,22 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, status
-from models import UserData, SessionData, FileData  
+from models import Base, engine, SessionLocal, UserData, SessionData, FileData  
 from schemas import UserInfo, SessionInfo, FileInfo
 import datetime
 import hashlib
-import random
+import secrets
 import xxhash
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session
 
 
 app = FastAPI()
-
-
-DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 
 # Database-related helper functions
 def get_db():
@@ -39,11 +32,11 @@ def get_user_by_info(db: Session, userInfo: UserInfo) -> UserData:
         .first()
     )
 
-def secure_hash(key: int) -> str:
+def secure_hash(key: str) -> str:
     # Python's hash() or any deterministic hash might be a security risk 
     # If a bad actor had access to the 4 digit code, they could 
     # deterministically generate the session token and get access.
-    return hashlib.sha256(str(key).encode('utf-8')).hexdigest()
+    return hashlib.sha256(key.encode('utf-8')).hexdigest()
 
 @app.post("/auth/code/request")
 async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_db)):
@@ -55,7 +48,7 @@ async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_
             detail = "You are not a registered user."
         )
 
-    code = random.randint(1000, 9999)
+    code = str(secrets.randbelow(10000)).zfill(4)
     hashedCode = secure_hash(code)
     # Store the hashed code for security
     # Ideally the key is the user_id AND device_id
@@ -67,7 +60,6 @@ async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_
 # Store temporary 4 digit codes in memory
 pending_codes = {}
 
-'''
 # Creates mock database users - run only once
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
@@ -83,7 +75,6 @@ try:
 
 finally:
     db.close()
-'''
 
 def generate_session_token(sessionInfo: SessionInfo) -> str:
     # A random seed like current time makes this token harder to regenerate

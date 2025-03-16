@@ -24,7 +24,13 @@ def hash_multiple_keys(*keys):
 async def generate_session_token(code: int, device_id: str):
     now = datetime.datetime.now(tz = datetime.timezone.utc)
     currentTime = int(now.timestamp())
+    
+    # A random seed makes this token harder to regenerate
     hasher = xxhash.xxh64(seed = currentTime)
+    
+    # TODO needs error handling
+    # TODO how can this be encrypted further?
+    # TODO Is it safer to use a longer hash and truncate it?
     hasher.update(str(code) + device_id)
     sessionToken = hasher.hexdigest()
     return {"session_token": sessionToken}

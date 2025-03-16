@@ -8,7 +8,6 @@ class UserData(Base):
     user_id = Column(Integer, primary_key = True, index = True)
     email = Column(String)
     device_id = Column(String)
-    sessions = relationship("SessionData", back_populates = "user")
     files = relationship("FileData", back_populates = "user")
 
 class SessionData(Base):
@@ -18,7 +17,6 @@ class SessionData(Base):
     four_digit_code = Column(String)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     device_id = Column(String)
-    user = relationship("UserData", back_populates = "sessions")
 
 class FileData(Base):
     __tablename__ = "files"

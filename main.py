@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel
+import datetime
 import hashlib
 import random
+import xxhash
 
 import sqlalchemy
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
@@ -44,7 +46,7 @@ class UserInfo(BaseModel):
 
 class SessionInfo(BaseModel):
     device_id: str
-    code: str
+    code: int
 
 class FileInfo(BaseModel):
     file_name: str
@@ -70,11 +72,11 @@ def get_user_by_info(db: Session, userInfo: UserInfo) -> UserData:
         .first()
     )
 
-def secure_hash(key: str) -> str:
+def secure_hash(key: int) -> str:
     # Python's hash() or any deterministic hash might be a security risk 
     # If a bad actor had access to the 4 digit code, they could 
     # deterministically generate the session token and get access.
-    return hashlib.sha256(key.encode('utf-8')).hexdigest()
+    return hashlib.sha256(str(key).encode('utf-8')).hexdigest()
 
 @app.post("/auth/code/request")
 async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_db)):
@@ -87,14 +89,15 @@ async def generate_and_store_code(userInfo: UserInfo, db: Session = Depends(get_
         )
 
     code = random.randint(1000, 9999)
-    hashedCode = secure_hash(str(code))
+    hashedCode = secure_hash(code)
     # Store the hashed code for security
     # Ideally the key is the user_id AND device_id
     pending_codes[userInfo.device_id] = hashedCode
+    print(f'Your 4-digit code is: {code}')
     return code
 
 '''
-# Create mock database users
+# Creates mock database users - run only once
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 try:
@@ -115,8 +118,18 @@ finally:
 pending_codes = {}
 
 
-'''
+def hash_session_info(sessionInfo: SessionInfo) -> str:
+    # A random seed like current time makes this token harder to regenerate
+    now = datetime.datetime.now(tz = datetime.timezone.utc)
+    currentTime = int(now.timestamp())
 
+    # Risk: xxhash is not cryptographically secure, could be replaced by SHA-256 and truncation to 16 char
+    # TODO Is it safe to directly truncate a longer hash? It may increase risk of collisions.
+    hasher = xxhash.xxh64(seed = currentTime)
+    hasher.update(str(sessionInfo.code) + sessionInfo.device_id)
+    return hasher.hexdigest()
+
+'''
 def create_session(db: Session, sessionInfo: SessionInfo):
     # TODO can I call it session?
 
@@ -125,24 +138,36 @@ def create_session(db: Session, sessionInfo: SessionInfo):
     db.commit()
     db.refresh(db_entry)
     return db_entry
+'''
 
-    
+
 @app.post("/auth/code/verify")
 async def generate_session_token(sessionInfo: SessionInfo):
-    now = datetime.datetime.now(tz = datetime.timezone.utc)
-    currentTime = int(now.timestamp())
+    if not sessionInfo.device_id in pending_codes:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "If your device is already registered, please request a new 4-digit code."
+        )
     
-    # A random seed makes this token harder to regenerate
-    # Risk: xxhash is not cryptographically secure.
-    # Could be replaced by SHA-256 and truncation to 16 char
-    hasher = xxhash.xxh64(seed = currentTime)
+    hashedCode = secure_hash(sessionInfo.code)
+    if pending_codes[sessionInfo.device_id] != hashedCode:
+        raise HTTPException(
+            status_code = status.HTTP_401_UNAUTHORIZED,
+            detail = "You have not entered a valid 4-digit code."
+        )
     
-    # TODO needs error handling
-    # TODO how can this be encrypted further?
-    # TODO Is it safer to use a longer hash and truncate it?
-    hasher.update(str(sessionInfo.code) + sessionInfo.device_id)
-    sessionToken = hasher.hexdigest()
+    print(f'Pending codes in hashed form are:\n')
+    for keys, value in pending_codes.items():
+        print(f'keys: {keys}, hashedCode: {value}\n')
+    
+    # Clear this element from our local map
+    del pending_codes[sessionInfo.device_id]
+    print(f"\nDeleted {sessionInfo.code} from list of pending codes")
+
+    sessionToken = hash_session_info(sessionInfo)
     return {"session_token": sessionToken}
+
+'''
 
 @app.post("/file/:file_name")
 async def upload_file(sessionToken: str, file_name: str):

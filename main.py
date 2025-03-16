@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+import random
 import datetime
 import xxhash
 
@@ -11,14 +12,19 @@ class CustomerInfo(BaseModel):
 
 @app.post("/auth/code/request")
 async def generate_code(customerInfo: CustomerInfo):
-    return hash_multiple_keys(customerInfo.email, customerInfo.device_id)
+    code = random.randint(1000, 9999)
+    # TODO Store this somewhere
+    codeHashed = hash_key(code)
+    return code
 
-def hash_multiple_keys(*keys):
+def hash_key(key):
     # TODO security risk - should a fixed tuple always result in the same hash?
     # If a bad actor had access to the 4 digit code,
     # they could generate the session token and get access.
     # This should be generated non-deterministically
-    return hash(tuple(sorted(keys))) % 10000
+    return hash(key) % 10000
+
+
 
 @app.post("/auth/code/verify")
 async def generate_session_token(code: int, device_id: str):
@@ -26,6 +32,8 @@ async def generate_session_token(code: int, device_id: str):
     currentTime = int(now.timestamp())
     
     # A random seed makes this token harder to regenerate
+    # Risk: xxhash is not cryptographically secure.
+    # Could be replaced by SHA-256 and truncation to 16 char
     hasher = xxhash.xxh64(seed = currentTime)
     
     # TODO needs error handling
@@ -34,6 +42,8 @@ async def generate_session_token(code: int, device_id: str):
     hasher.update(str(code) + device_id)
     sessionToken = hasher.hexdigest()
     return {"session_token": sessionToken}
+
+'''
 
 @app.post("/file/:file_name")
 async def upload_file(sessionToken: str, file_name: str):
@@ -59,7 +69,8 @@ async def download_file(sessionToken: str, file_name: str):
 
     # Is the token expired?
 
-    # Verify token is associated with this user 
+    # Verify token is associated with this user
+    # Device ID can be different in this case
     
     # Validate that file_name is associated with user
     # Might be better to associate each file with a key here, 
@@ -68,3 +79,4 @@ async def download_file(sessionToken: str, file_name: str):
     # Retrieve file_name from DB
     
     # Return file byte stream and status code      
+'''

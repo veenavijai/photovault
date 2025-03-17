@@ -39,7 +39,7 @@ Swagger UI: http://127.0.0.1:8000/docs#/
 - Web Framework: I chose FastAPI over Flask since it supported asynchronous APIs. Moreover, REST APIs seemed much easier to test since FastAPI offered in-built data validation with Pydantic schemas. Thankfully, this paid off because error messages were straightforward.
 - Asynchronous Server Gateway Interface: uvicorn. I needed an application server to handle async requests, and uvicorn + FastAPI had great documentation online.
 - Database: SQLite. Storing user information locally even for an MVP felt like a no-no, considering there were several entities and relationships to model, and security is the biggest priority. So, I chose SQLite which didn't require me to spin up another server and was as lightweight as possible.
-- Data modeling: Pydantic (built-in).
+- Schema modeling: Pydantic (built-in).
 - UI for testing: I tried Swagger UI to see what it was like. The UI was so clean and the auto-generated documentation was fantastic. I could see all the response body and error codes and it was very user-friendly.
 
 ### Data modeling

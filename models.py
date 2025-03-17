@@ -12,7 +12,6 @@ class UserData(Base):
     user_id = Column(Integer, primary_key = True, index = True)
     email = Column(String)
     device_id = Column(String)
-    files = relationship("FileData", back_populates = "user")
 
 class SessionData(Base):
     __tablename__ = "sessions"
@@ -24,4 +23,4 @@ class FileData(Base):
     file_id = Column(Integer, primary_key = True, index = True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     file_name = Column(String)
-    user = relationship("UserData", back_populates = "files")
+    file_path = Column(String)

@@ -1,16 +1,23 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathvalidate import sanitize_filename
 from sqlalchemy.orm import Session
 
-from helpers_db import get_db, get_user_by_info, create_session_entry
+from helpers_db import get_db, get_user_by_info, create_session_entry, get_user_id_from_session_token, create_file_entry, get_file_path_for_download
 from helpers_hash import generate_session_token, secure_hash
-from helpers_validation import validate_user_info, validate_session_info, validate_device_id_and_code
-from schemas import UserInfo, SessionInfo, FileInfo
+from helpers_validation import validate_user_info, validate_session_info, validate_device_id_and_code, validate_auth_format, validate_file, validate_file_contents, validate_file_path
+from schemas import UserInfo, SessionInfo
 
+import os
 import secrets
 
 app = FastAPI()
+app.mount("/uploads", StaticFiles(directory = "uploads"), name = "uploads")
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
 
-# Store temporary 4 digit codes in memory
+# Store temporary 4 digit codes in memory. This should be in a DB for a production system.
 pending_codes = {}
 
 @app.post("/auth/code/request")
@@ -52,47 +59,54 @@ async def verify_four_digit_code(sessionInfo: SessionInfo, db: Session = Depends
     # print(f"\nDeleted {sessionInfo.code} from list of pending codes")
 
     sessionToken = generate_session_token(sessionInfo)
-
-    # Store session information in SessionData DB
     create_session_entry(db, sessionToken, user_id)
     
     return {"session_token": sessionToken}
 
-'''
+@app.post("/file/{file_name}")
+async def upload_file(file_name: str, sessionToken: str, request: Request, db: Session = Depends(get_db)):
+    validate_auth_format(db, sessionToken)
+    user_id = get_user_id_from_session_token(db, sessionToken)
 
-@app.post("/file/:file_name")
-async def upload_file(sessionToken: str, file_name: str):
-    # Check if token is present
+    # TODO add session expiry as a feature. (5 minutes seems reasonable)
+    # TODO validate that input is only of certain formats, maybe jpg, png, mov
+    # TODO keep size limits on input?
 
-    # Is the token well-formed
+    sanitized_filename = sanitize_filename(file_name)
+    validate_file(sanitized_filename)
 
-    # Is the token expired?
-
-    # Verify token is associated with this user 
-
-    # Validate file type and size
-
-    # Store the file on the cloud/disk
-    file_content = await file.read()
-
-    # Have a DB associating user to the file
-
-@app.get("/file/:file_name")
-async def download_file(sessionToken: str, file_name: str):
-     # Check if token is present
-
-    # Is the token well-formed
-
-    # Is the token expired?
-
-    # Verify token is associated with this user
-    # Device ID can be different in this case
+    contents = await request.body()
+    validate_file_contents
     
-    # Validate that file_name is associated with user
-    # Might be better to associate each file with a key here, 
-    # Because different users can use the same file_name
+    file_path = os.path.join("uploads", sanitized_filename)
+
+    try:
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        create_file_entry(db, user_id, file_name, file_path)
+        db.close()
+    except Exception as e:
+        raise HTTPException(
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail = str(e)
+        )
     
-    # Retrieve file_name from DB
-    
-    # Return file byte stream and status code      
-'''
+    return {"message": "File upload was successful!"}
+
+@app.get("/file/{file_name}")
+async def download_file(file_name: str, sessionToken: str, db: Session = Depends(get_db)):
+    validate_auth_format(db, sessionToken)
+
+    sanitized_filename = sanitize_filename(file_name)
+    validate_file(sanitized_filename)
+
+    # Verify file_name is associated with this user
+    file_path = get_file_path_for_download(user_id, sanitized_filename)
+
+    validate_file_path(file_path)
+
+    # Return file byte stream
+    return FileResponse(
+        path = file_path,
+        filename = sanitized_filename)      

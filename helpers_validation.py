@@ -87,13 +87,6 @@ def validate_file(file_name: str):
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = "Please enter a valid file name."
         )
-    
-def validate_file_contents(contents):
-    if not contents:
-        raise HTTPException(
-            status_code = status.HTTP_400_BAD_REQUEST,
-            detail = "You are trying to upload an empty file."
-        )
 
 def validate_file_path(file_path: str):
     if not os.path.exists(file_path):

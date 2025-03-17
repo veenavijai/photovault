@@ -1,12 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathvalidate import sanitize_filename
 from sqlalchemy.orm import Session
 
 from helpers_db import get_db, get_user_by_info, create_session_entry, get_user_id_from_session_token, create_file_entry, get_file_path_for_download
 from helpers_hash import generate_session_token, secure_hash
-from helpers_validation import validate_user_info, validate_session_info, validate_device_id_and_code, validate_auth_format, validate_file, validate_file_contents, validate_file_path
+from helpers_validation import validate_user_info, validate_session_info, validate_device_id_and_code, validate_auth_format, validate_file, validate_file_path
 from schemas import UserInfo, SessionInfo
 
 import os
@@ -64,7 +64,7 @@ async def verify_four_digit_code(sessionInfo: SessionInfo, db: Session = Depends
     return {"session_token": sessionToken}
 
 @app.post("/file/{file_name}")
-async def upload_file(file_name: str, sessionToken: str, request: Request, db: Session = Depends(get_db)):
+async def upload_file(file_name: str, sessionToken: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
     validate_auth_format(db, sessionToken)
     user_id = get_user_id_from_session_token(db, sessionToken)
 
@@ -74,18 +74,22 @@ async def upload_file(file_name: str, sessionToken: str, request: Request, db: S
 
     sanitized_filename = sanitize_filename(file_name)
     validate_file(sanitized_filename)
-
-    contents = await request.body()
-    validate_file_contents
     
     file_path = os.path.join("uploads", sanitized_filename)
+    # Delete pre-existing file with this path, if any
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
     try:
         with open(file_path, "wb") as f:
-            f.write(contents)
-
-        create_file_entry(db, user_id, file_name, file_path)
-        db.close()
+            while contents := file.file.read(1024 * 1024):
+                f.write(contents)
+        file.file.close()
+        db = next(get_db())
+        try:
+            create_file_entry(db, user_id, file_name, file_path)
+        finally: 
+            db.close()
     except Exception as e:
         raise HTTPException(
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -97,16 +101,20 @@ async def upload_file(file_name: str, sessionToken: str, request: Request, db: S
 @app.get("/file/{file_name}")
 async def download_file(file_name: str, sessionToken: str, db: Session = Depends(get_db)):
     validate_auth_format(db, sessionToken)
+    user_id = get_user_id_from_session_token(db, sessionToken)
 
     sanitized_filename = sanitize_filename(file_name)
     validate_file(sanitized_filename)
 
     # Verify file_name is associated with this user
-    file_path = get_file_path_for_download(user_id, sanitized_filename)
-
+    file_path = get_file_path_for_download(db, user_id, sanitized_filename)
     validate_file_path(file_path)
 
     # Return file byte stream
-    return FileResponse(
-        path = file_path,
-        filename = sanitized_filename)      
+    def data_generator(file_path: str):
+        with open(file_path, "rb") as f:
+            while chunk := f.read(1024):
+                yield chunk
+
+    # TODO need to guard against invalid types
+    return StreamingResponse(data_generator(file_path), media_type="image/jpeg")

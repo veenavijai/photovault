@@ -46,14 +46,14 @@ def get_user_id_from_device_id(db: Session, sessionInfo: SessionInfo) -> int:
     return user.user_id
 
 def get_user_id_from_session_token(db: Session, sessionToken: str) -> int:
-    user_id = db.query(SessionData).filter(SessionData.session_token == sessionToken).first()
-    if user_id is None:
+    user = db.query(SessionData).filter(SessionData.session_token == sessionToken).first()
+    if user is None:
         raise HTTPException(
             status_code = status.HTTP_404_NOT_FOUND,
             detail = "Your user details could not be retrieved."
         )
 
-    return user_id
+    return user.user_id
 
 def doesMatchSessionToken(db: Session, sessionToken: str) -> bool:
     return (
@@ -64,11 +64,11 @@ def doesMatchSessionToken(db: Session, sessionToken: str) -> bool:
     )
 
 def get_file_path_for_download(db: Session, user_id: str, file_name: str) -> str:
-    file_path = db.query(FileData).filter(FileData.user_id == user_id, FileData.file_name == file_name).first()
-    if file_path is None:
+    file = db.query(FileData).filter(FileData.user_id == user_id, FileData.file_name == file_name).first()
+    if file is None:
         raise HTTPException(
             status_code = status.HTTP_400_BAD_REQUEST,
             detail = "Your requested file does not exist."
         )
 
-    return file_path
+    return file.file_path

@@ -17,10 +17,7 @@ class UserData(Base):
 class SessionData(Base):
     __tablename__ = "sessions"
     session_token = Column(String,  primary_key = True, index = True)
-    # This is hashed
-    four_digit_code = Column(String)
     user_id = Column(Integer, ForeignKey("users.user_id"))
-    device_id = Column(String)
 
 class FileData(Base):
     __tablename__ = "files"

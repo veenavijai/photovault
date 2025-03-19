@@ -1,11 +1,11 @@
-# minikeepsafe
-MVP for a Mini Keepsafe
+# photovault
+Authenticated photo uploads and downloads.
 
 ## Setup instructions
 
 ```
-git clone https://github.com/veenavijai/minikeepsafe.git
-cd minikeepsafe
+git clone https://github.com/veenavijai/photovault.git
+cd photovault
 python3 -m venv .venv
 pip3 install -r requirements.txt
 python3 create_mock_DB.py
@@ -29,16 +29,11 @@ Swagger UI: http://127.0.0.1:8000/docs#/
 
 ## High-level design choices
 
-### Overall
-
-- I tried to understand Keepsafe's tech stack first and learn why each component was necessary/the preferred option.
-- I aimed to find a sweet spot between technologies that would help me prototype quickly, but also convert the code to production-level if I had time later.
-
 ### Tools 
 
 - Web Framework: I chose FastAPI over Flask since it supported asynchronous APIs. Moreover, REST APIs seemed much easier to test since FastAPI offered in-built data validation with Pydantic schemas. Thankfully, this paid off because error messages were straightforward.
 - Asynchronous Server Gateway Interface: uvicorn. I needed an application server to handle async requests, and uvicorn + FastAPI had great documentation online.
-- Database: SQLite. Storing user information locally even for an MVP felt like a no-no, considering there were several entities and relationships to model, and security is the biggest priority. So, I chose SQLite which didn't require me to spin up another server and was as lightweight as possible.
+- Database: SQLite. Storing user information locally felt like a no-no, considering there were several entities and relationships to model, and security is the biggest priority. So, I chose SQLite which didn't require me to spin up another server and was as lightweight as possible.
 - Schema modeling: Pydantic (built-in).
 - UI for testing: I tried Swagger UI to see what it was like. The UI was so clean and the auto-generated documentation was fantastic. I could see all the response body and error codes and it was very user-friendly.
 
@@ -85,6 +80,7 @@ class FileData(Base):
 - Several more fields should likely be hashed before storing them directly in the DB and querying for them, specifically user_id, session_token 
 - In the validation functions, regexes would be a stricter check, esp. for fields like email.
 - In the file download API, there are potential vulnerabilities. For example, a bad actor could keep generating session codes and hit the API with 'popular' file names. If that session code simply existed in the DB due to some past activity from any user (since session codes cannot expire) and the file name matched, the bad actor would have rendered this application not secure. To avoid this, there should be strict expiry limits on sign-in codes and session tokens. This could also be somewhat mitigated through rate limiting.
+- The file path for each user can be unique and user a user-based hash, instead of a common `uploads/` folder.
 
 ## My feature bucket list 
 

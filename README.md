@@ -1,5 +1,6 @@
 # photovault
-Authenticated photo uploads and downloads.
+
+Supports authenticated photo uploads and downloads with a one-time usable 4-digit PIN and device-based session token.
 
 ## Setup instructions
 
@@ -27,6 +28,64 @@ Swagger UI: http://127.0.0.1:8000/docs#/
 - POST API which accepts the user's device ID and the 4-digit PIN to generate a session token
 - POST API which accepts previously generated session token and a file bytestream and uploads file after user authentication
 - GET API which accepts previously generated session token and a file name, and downloads file after user authentication
+
+## Screenshots
+
+Here's our mock DB, with user1 and user2:
+
+<img width="557" alt="Screenshot 2025-03-19 at 12 06 11 PM" src="https://github.com/user-attachments/assets/9456c50e-1349-4baa-8e28-00af1364b603" />
+
+POST /auth/code/request with a valid user email and device ID returns a 200 OK and 4-digit PIN
+
+<img width="1303" alt="Screenshot 2025-03-19 at 11 58 04 AM" src="https://github.com/user-attachments/assets/90d511f7-e552-47f6-8eed-e6f09b7c0b7a" />
+
+<img width="1297" alt="Screenshot 2025-03-19 at 11 58 16 AM" src="https://github.com/user-attachments/assets/e5c97e59-df78-4ebd-a8f3-80181bfa616d" />
+
+An unregistered user returns a 401 Unauthorized with this message:
+
+<img width="1293" alt="Screenshot 2025-03-19 at 11 58 34 AM" src="https://github.com/user-attachments/assets/770472da-c17e-495f-99eb-b3dc50f289bd" />
+
+POST /auth/code/verify takes in a valid 4-digit PIN and returns a 16-character unique session token:
+
+<img width="1302" alt="Screenshot 2025-03-19 at 11 59 14 AM" src="https://github.com/user-attachments/assets/340b0800-b85a-4ab0-a5bf-6e3b612ad206" />
+
+<img width="1301" alt="Screenshot 2025-03-19 at 11 59 24 AM" src="https://github.com/user-attachments/assets/724d96d4-841e-4f0a-bbb6-7a754e0a9627" />
+
+An incorrect PIN is detected as a 400 Bad Request with the following message:
+
+<img width="1303" alt="Screenshot 2025-03-19 at 11 59 46 AM" src="https://github.com/user-attachments/assets/2412f5d3-0222-4069-a898-05a3b567e5d6" />
+
+A PIN that has already been used once also shows a 400 Bad Request with the following message:
+
+<img width="1300" alt="Screenshot 2025-03-19 at 12 00 10 PM" src="https://github.com/user-attachments/assets/f8eb30e8-73b3-4a83-a1b5-27805f7a3c79" />
+
+POST /file/{file_name} lets an authenticated user upload image files of their choice:
+
+<img width="1303" alt="Screenshot 2025-03-19 at 12 01 07 PM" src="https://github.com/user-attachments/assets/add05b29-ab69-4d91-a488-0ead1246dc8f" />
+
+<img width="1303" alt="Screenshot 2025-03-19 at 12 01 15 PM" src="https://github.com/user-attachments/assets/c28f10b7-7970-4a9c-8102-93699b327973" />
+
+GET /file/{file_name} lets an authenticated user download an existing image file of their choice, which is rendered in Swagger UI:
+
+<img width="1421" alt="Screenshot 2025-03-19 at 12 01 44 PM" src="https://github.com/user-attachments/assets/bfdc295a-878a-47c3-85df-e7565e0ea1c5" />
+
+<img width="1431" alt="Screenshot 2025-03-19 at 12 02 06 PM" src="https://github.com/user-attachments/assets/a415939c-da4a-48a0-a8db-884ecd098652" />
+
+If an authenticated user tries to download a non-existent file, they get a 400 Bad Request with the following message:
+
+<img width="1423" alt="Screenshot 2025-03-19 at 12 02 24 PM" src="https://github.com/user-attachments/assets/d0ec3912-5c11-49fd-a30b-52a9b1ce7eb4" />
+
+<img width="1421" alt="Screenshot 2025-03-19 at 12 02 32 PM" src="https://github.com/user-attachments/assets/dab28ae9-2573-485e-a05d-13b1d0cbafc5" />
+
+If an authenticated user tries to download an image file, they get a 401 Unauthorized with the following message:
+
+<img width="1424" alt="Screenshot 2025-03-19 at 12 02 49 PM" src="https://github.com/user-attachments/assets/33f348a0-28e3-4c67-a315-9c09673ddfe4" />
+
+<img width="1420" alt="Screenshot 2025-03-19 at 12 02 55 PM" src="https://github.com/user-attachments/assets/833e0a38-c27a-4576-9862-53c6e31a226b" />
+
+Error codes from the terminal for all requests with HTTP status codes:
+
+<img width="960" alt="Screenshot 2025-03-19 at 12 03 13 PM" src="https://github.com/user-attachments/assets/7869d60a-ccb7-4b3d-99f4-5ba01cc371a5" />
 
 ## High-level design choices
 

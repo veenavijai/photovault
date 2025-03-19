@@ -7,6 +7,7 @@ Authenticated photo uploads and downloads.
 git clone https://github.com/veenavijai/photovault.git
 cd photovault
 python3 -m venv .venv
+source .venv/bin/activate
 pip3 install -r requirements.txt
 python3 create_mock_DB.py
 ```
